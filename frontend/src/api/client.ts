@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import {
   Investigation,
   CreateInvestigationPayload,
@@ -14,8 +14,14 @@ import {
   PageResponse
 } from '../types';
 
+const apiBase = import.meta.env.VITE_API_URL
+  ? (import.meta.env.VITE_API_URL.endsWith('/api')
+      ? import.meta.env.VITE_API_URL
+      : `${import.meta.env.VITE_API_URL}/api`)
+  : '/api';
+
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: apiBase,
   headers: {
     'Content-Type': 'application/json',
   },
