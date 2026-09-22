@@ -22,6 +22,12 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(HttpStatus.NOT_FOUND.value(), "Not Found", "Resource not found: " + ex.getResourcePath(), request.getRequestURI());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+
     @ExceptionHandler(InvalidLogException.class)
     public ResponseEntity<ErrorResponse> handleInvalidLog(InvalidLogException ex, HttpServletRequest request) {
         log.warn("Invalid log processing request: {}", ex.getMessage());
