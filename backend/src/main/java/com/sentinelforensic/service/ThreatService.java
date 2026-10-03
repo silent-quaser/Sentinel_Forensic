@@ -10,8 +10,11 @@ import com.sentinelforensic.model.ThreatStatus;
 import com.sentinelforensic.repository.LogEntryRepository;
 import com.sentinelforensic.repository.ThreatEvidenceRepository;
 import com.sentinelforensic.repository.ThreatRepository;
+import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +46,28 @@ public class ThreatService {
             String ruleCode,
             String username) {
 
-        List<Threat> threats = threatRepository.filterThreats(investigationId, severity, status, ruleCode, username);
+        Specification<Threat> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (investigationId != null) {
+                predicates.add(cb.equal(root.get("investigationId"), investigationId));
+            }
+            if (severity != null) {
+                predicates.add(cb.equal(root.get("severity"), severity));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (ruleCode != null && !ruleCode.trim().isEmpty()) {
+                predicates.add(cb.equal(root.get("ruleCode"), ruleCode.trim()));
+            }
+            if (username != null && !username.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("affectedUser")), "%" + username.trim().toLowerCase() + "%"));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "detectedAt").and(Sort.by(Sort.Direction.DESC, "id"));
+        List<Threat> threats = threatRepository.findAll(spec, sort);
         return threats.stream()
                 .map(this::toThreatDtoWithoutEvidence)
                 .collect(Collectors.toList());
@@ -105,6 +129,16 @@ public class ThreatService {
         dto.setAffectedIp(threat.getAffectedIp());
         dto.setEscalationReason(threat.getEscalationReason());
         dto.setScoreBreakdown(threat.getScoreBreakdown());
+
+        List<Long> logIds = threatEvidenceRepository.findLogEntryIdsByThreatId(threat.getId());
+        List<LogEntryDto> dummyList = new ArrayList<>();
+        for (Long lid : logIds) {
+            LogEntryDto dummy = new LogEntryDto();
+            dummy.setId(lid);
+            dummyList.add(dummy);
+        }
+        dto.setEvidenceEvents(dummyList);
+
         return dto;
     }
 }

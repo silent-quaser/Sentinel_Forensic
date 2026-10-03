@@ -14,11 +14,13 @@ import com.sentinelforensic.repository.InvestigationRepository;
 import com.sentinelforensic.repository.LogEntryRepository;
 import com.sentinelforensic.repository.ThreatEvidenceRepository;
 import com.sentinelforensic.repository.ThreatRepository;
+import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -108,9 +110,35 @@ public class LogService {
             throw new ResourceNotFoundException("Investigation", "id", investigationId);
         }
 
-        Page<LogEntry> page = logEntryRepository.filterInvestigationLogs(
-                investigationId, eventType, username, source, startTime, endTime, keyword, pageable);
+        Specification<LogEntry> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("investigationId"), investigationId));
 
+            if (eventType != null && !eventType.trim().isEmpty()) {
+                predicates.add(cb.equal(root.get("eventType"), eventType.trim()));
+            }
+            if (username != null && !username.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("username")), "%" + username.trim().toLowerCase() + "%"));
+            }
+            if (source != null && !source.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("source")), "%" + source.trim().toLowerCase() + "%"));
+            }
+            if (startTime != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("timestamp"), startTime));
+            }
+            if (endTime != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("timestamp"), endTime));
+            }
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                String kw = "%" + keyword.trim().toLowerCase() + "%";
+                Predicate rawMatch = cb.like(cb.lower(root.get("rawMessage")), kw);
+                Predicate descMatch = cb.like(cb.lower(root.get("description")), kw);
+                predicates.add(cb.or(rawMatch, descMatch));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<LogEntry> page = logEntryRepository.findAll(spec, pageable);
         List<LogEntryDto> dtos = page.getContent().stream()
                 .map(this::toLogEntryDto)
                 .collect(Collectors.toList());
@@ -123,10 +151,8 @@ public class LogService {
             throw new ResourceNotFoundException("Investigation", "id", investigationId);
         }
 
-        // Chronological sort: timestamp ASC, then ID as deterministic tie-breaker
         List<LogEntry> logs = logEntryRepository.findByInvestigationIdOrderByTimestampAscIdAsc(investigationId);
 
-        // Pre-fetch all threats for this investigation
         Map<Long, Threat> threatMap = threatRepository.findByInvestigationIdOrderByDetectedAtDesc(investigationId)
                 .stream().collect(Collectors.toMap(Threat::getId, t -> t, (a, b) -> a));
 
@@ -143,7 +169,6 @@ public class LogService {
             dto.setDescription(entry.getDescription());
             dto.setRawMessage(entry.getRawMessage());
 
-            // Check linked threats through evidence table
             List<Long> threatIds = threatEvidenceRepository.findThreatIdsByLogEntryId(entry.getId());
             boolean isSuspicious = "LOGIN_FAILED".equalsIgnoreCase(entry.getEventType())
                     || "ACCOUNT_LOCKED".equalsIgnoreCase(entry.getEventType())
@@ -166,7 +191,27 @@ public class LogService {
     }
 
     public Page<LogEntryDto> searchGlobalLogs(String eventType, String username, String source, String keyword, Pageable pageable) {
-        Page<LogEntry> page = logEntryRepository.searchGlobalLogs(eventType, username, source, keyword, pageable);
+        Specification<LogEntry> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (eventType != null && !eventType.trim().isEmpty()) {
+                predicates.add(cb.equal(root.get("eventType"), eventType.trim()));
+            }
+            if (username != null && !username.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("username")), "%" + username.trim().toLowerCase() + "%"));
+            }
+            if (source != null && !source.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("source")), "%" + source.trim().toLowerCase() + "%"));
+            }
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                String kw = "%" + keyword.trim().toLowerCase() + "%";
+                Predicate rawMatch = cb.like(cb.lower(root.get("rawMessage")), kw);
+                Predicate descMatch = cb.like(cb.lower(root.get("description")), kw);
+                predicates.add(cb.or(rawMatch, descMatch));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<LogEntry> page = logEntryRepository.findAll(spec, pageable);
         List<LogEntryDto> dtos = page.getContent().stream().map(this::toLogEntryDto).collect(Collectors.toList());
         return new PageImpl<>(dtos, pageable, page.getTotalElements());
     }

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldAlert, AlertOctagon, RefreshCw, ChevronRight } from 'lucide-react';
 import { threatApi } from '../api/client';
 import { Threat } from '../types';
@@ -82,6 +82,7 @@ export default function GlobalThreats() {
             className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-300 font-mono outline-none"
           >
             <option value="">ALL STATUSES</option>
+            <option value="OPEN">OPEN</option>
             <option value="DETECTED">DETECTED</option>
             <option value="REVIEWED">REVIEWED</option>
             <option value="CONFIRMED">CONFIRMED</option>
